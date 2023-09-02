@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -37,15 +38,17 @@ func main() {
 	if err != nil {
 		panic("Failed to connect to database")
 	}
-
 	// Automigrate
 	db.AutoMigrate(&Task{}, &Subtask{})
 
 	// API
 	app := fiber.New()
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello, World 👋!")
-	})
+	// CORS
+	app.Use(cors.New(cors.Config{
+        AllowOrigins: "http://localhost:8080", 
+        AllowMethods: "GET,POST,PUT,PATCH,DELETE",
+        AllowHeaders: "Origin, Content-Type, Accept",
+    }))
 
 	// Add Task
 	app.Post("/tasks", func(c *fiber.Ctx) error {
@@ -136,6 +139,12 @@ func main() {
 				"message": "Failed to save data",
 			})
 		}
+		err = db.Where("status = ?", "ongoing").Preload("Subtasks").Find(&task).Error
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"message": "Failed to get data",
+			})
+		}
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"message": "Task successfully updated",
 			"task": task,
@@ -214,6 +223,20 @@ func main() {
 		}
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"message": "Task successfully updated",
+			"task": task,
+		})
+	})
+
+	// Show one Task
+	app.Get("/tasks/:id", func(c *fiber.Ctx) error {
+		var task Task
+		err := db.Where("id = ?", c.Params("id")).Preload("Subtasks").First(&task).Error
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"message": "Failed to get data",
+			})
+		}
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"task": task,
 		})
 	})
